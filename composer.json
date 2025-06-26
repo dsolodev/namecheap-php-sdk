@@ -1,0 +1,67 @@
+{
+  "name": "dsolodev/namecheap-php-sdk",
+  "type": "library",
+  "description": "Modern PHP 8.4 SDK for Namecheap APIs with strict typing, enums, and latest PHP features",
+  "version": "1.0.0",
+  "keywords": [
+    "api",
+    "namecheap",
+    "domains",
+    "ssl",
+    "dns",
+    "php8.4"
+  ],
+  "homepage": "https://github.com/dsolodev/namecheap-php-sdk",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "dsolodev",
+      "email": "dsolodev@gmail.com",
+      "role": "Developer"
+    }
+  ],
+  "require": {
+    "php": "^8.4",
+    "ext-curl": "*",
+    "ext-json": "*",
+    "ext-libxml": "*",
+    "ext-simplexml": "*",
+    "psr/http-client": "^1.0",
+    "psr/http-factory": "^1.1",
+    "psr/log": "^3.0"
+  },
+  "require-dev": {
+    "laravel/pint": "^1.22",
+    "phpstan/phpstan": "^2.1",
+    "rector/rector": "^2.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "Namecheap\\": "src"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Namecheap\\Examples\\": "examples/"
+    }
+  },
+  "config": {
+    "sort-packages": true,
+    "allow-plugins": {
+      "php-http/discovery": true
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true,
+  "scripts": {
+    "phpstan": "phpstan analyse --configuration=phpstan.neon",
+    "cs-fix": "pint",
+    "cs-check": "pint --test",
+    "rector": "rector process --dry-run",
+    "rector-fix": "rector process",
+    "quality": [
+      "@cs-check",
+      "@phpstan"
+    ]
+  }
+}

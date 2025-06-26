@@ -1,0 +1,12 @@
+composer.phar
+composer.lock
+/vendor/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.pint.cache
+phpstan.neon.dist
+.phpstan.cache/
+rector.php.dist
