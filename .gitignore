@@ -10,3 +10,4 @@ composer.lock
 phpstan.neon.dist
 .phpstan.cache/
 rector.php.dist
+.claude

@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Namecheap\Exceptions;
 
@@ -11,6 +11,13 @@ use Throwable;
  */
 class ValidationException extends NamecheapException
 {
+    /**
+     * @param string $message
+     * @param int $code
+     * @param Throwable|null $previous
+     * @param array<string> $errors
+     * @param array<string, mixed> $context
+     */
     public function __construct(
         string                 $message = 'Validation failed',
         int                    $code = 400,
@@ -21,6 +28,7 @@ class ValidationException extends NamecheapException
         parent::__construct($message, $code, $previous, $context);
     }
 
+    /** @return array<string> */
     public function getErrors(): array
     {
         return $this->errors;

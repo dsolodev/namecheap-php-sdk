@@ -6,6 +6,8 @@ namespace Namecheap\DataTransferObjects;
 
 /**
  * API configuration data transfer object
+ *
+ * @param array<string, mixed> $curlOptions
  */
 readonly class ApiConfiguration
 {
@@ -16,7 +18,7 @@ readonly class ApiConfiguration
         public string $clientIp,
         public bool   $sandbox = false,
         public int    $timeout = 30,
-        public array  $curlOptions = [],
+        /** @var array<string, mixed> */ public array $curlOptions = [],
     ) {
     }
 }

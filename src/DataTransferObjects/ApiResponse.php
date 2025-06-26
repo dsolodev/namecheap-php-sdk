@@ -16,9 +16,9 @@ readonly class ApiResponse
     public function __construct(
         public bool    $success,
         public string  $command,
-        public array   $data,
-        public array   $errors = [],
-        public array   $warnings = [],
+        /** @var array<string, mixed> */ public array $data,
+        /** @var array<string> */ public array $errors = [],
+        /** @var array<string> */ public array $warnings = [],
         public ?string $server = null,
         public ?float  $executionTime = null,
         public ?string $gmtTimeDifference = null,

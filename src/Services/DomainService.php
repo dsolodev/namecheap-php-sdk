@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Namecheap\Services;
 
@@ -16,7 +16,6 @@ use Namecheap\Exceptions\AuthenticationException;
 use Namecheap\Exceptions\NetworkException;
 use Namecheap\Exceptions\ParseException;
 use Namecheap\Exceptions\ValidationException;
-
 use function is_array;
 use function is_string;
 
@@ -27,19 +26,18 @@ readonly class DomainService
 {
     public function __construct(
         private ApiClient $apiClient,
-    ) {
-    }
+    ) {}
 
     /**
      * Get list of domains
      *
-     * @throws ApiException
+     * @return array<Domain>
      * @throws ValidationException
      * @throws AuthenticationException
      * @throws NetworkException
      * @throws ParseException
      *
-     * @return array<Domain>
+     * @throws ApiException
      */
     public function getList(
         int     $page = 1,
@@ -49,7 +47,7 @@ readonly class DomainService
     ): array {
         $parameters = [
             'PageSize' => $pageSize,
-            'Page' => $page,
+            'Page'     => $page,
         ];
 
         if ($searchTerm !== null) {
@@ -67,6 +65,107 @@ readonly class DomainService
         );
 
         return $this->parseDomainList($response->data);
+    }
+
+    /**
+     * Parse domain list from API response
+     *
+     * @param array<string, mixed> $data
+     *
+     * @return array<Domain>
+     */
+    private function parseDomainList(array $data): array
+    {
+        $domains    = [];
+        $domainList = $data['DomainGetListResult'] ?? [];
+
+        if (!is_array($domainList)) {
+            return [];
+        }
+
+        if (isset($domainList['Domain'])) {
+            $domainData = $domainList['Domain'];
+
+            if (!is_array($domainData)) {
+                return [];
+            }
+
+            // Handle single domain
+            if (isset($domainData['@Name'])) {
+                $domains[] = $this->createDomainFromArray($domainData);
+            } else {
+                // Handle multiple domains
+                foreach ($domainData as $domain) {
+                    if (is_array($domain) && isset($domain['@Name'])) {
+                        $domains[] = $this->createDomainFromArray($domain);
+                    }
+                }
+            }
+        }
+
+        return $domains;
+    }
+
+    /**
+     * Create Domain object from array data
+     *
+     * @param array<string, mixed> $data
+     */
+    private function createDomainFromArray(array $data): Domain
+    {
+        $name            = $this->getStringValue($data, '@Name', '@DomainName');
+        $statusValue     = $this->getStringValue($data, '@Status') ?: 'Active';
+        $createdValue    = $this->getStringValue($data, '@Created') ?: 'now';
+        $expiresValue    = $this->getStringValue($data, '@Expires') ?: 'now';
+        $autoRenewValue  = $this->getStringValue($data, '@AutoRenew') ?: 'false';
+        $whoisGuardValue = $this->getStringValue($data, '@WhoisGuard') ?: 'DISABLED';
+        $isPremiumValue  = $this->getStringValue($data, '@IsPremium') ?: 'false';
+        $registrarValue  = $this->getStringValue($data, '@Registrar');
+
+        try {
+            $status = DomainStatus::from($statusValue);
+        } catch (Exception $exception) {
+            $status = DomainStatus::ACTIVE;
+        }
+
+        try {
+            $createdDate = new DateTimeImmutable($createdValue);
+        } catch (Exception $exception) {
+            $createdDate = new DateTimeImmutable();
+        }
+
+        try {
+            $expirationDate = new DateTimeImmutable($expiresValue);
+        } catch (Exception $exception) {
+            $expirationDate = new DateTimeImmutable();
+        }
+
+        return new Domain(
+            name          : $name,
+            status        : $status,
+            createdDate   : $createdDate,
+            expirationDate: $expirationDate,
+            autoRenew     : $autoRenewValue === 'true',
+            whoisGuard    : $whoisGuardValue === 'ENABLED',
+            isPremium     : $isPremiumValue === 'true',
+            registrar     : $registrarValue,
+        );
+    }
+
+    /**
+     * Safely get string value from array with fallback keys
+     *
+     * @param array<string, mixed> $data
+     */
+    private function getStringValue(array $data, string $key, ?string $fallbackKey = null): string
+    {
+        $value = $data[$key] ?? null;
+
+        if ($value === null && $fallbackKey !== null) {
+            $value = $data[$fallbackKey] ?? null;
+        }
+
+        return is_string($value) ? $value : '';
     }
 
     /**
@@ -94,15 +193,33 @@ readonly class DomainService
     }
 
     /**
-     * Get domain contacts
+     * Parse domain info from API response
+     *
+     * @param array<string, mixed> $data
      *
      * @throws ApiException
+     */
+    private function parseDomainInfo(array $data): Domain
+    {
+        $domainInfo = $data['DomainGetInfoResult'] ?? [];
+
+        if (!is_array($domainInfo)) {
+            throw new ApiException('Invalid domain info response format');
+        }
+
+        return $this->createDomainFromArray($domainInfo);
+    }
+
+    /**
+     * Get domain contacts
+     *
+     * @return array{registrant: ContactInfo, admin: ContactInfo, tech: ContactInfo, auxBilling: ContactInfo}
      * @throws AuthenticationException
      * @throws NetworkException
      * @throws ParseException
      * @throws ValidationException
      *
-     * @return array{registrant: ContactInfo, admin: ContactInfo, tech: ContactInfo, auxBilling: ContactInfo}
+     * @throws ApiException
      */
     public function getContacts(string $domainName): array
     {
@@ -117,6 +234,69 @@ readonly class DomainService
         );
 
         return $this->parseContactsInfo($response->data);
+    }
+
+    /**
+     * Parse contacts info from API response
+     *
+     * @param array<string, mixed> $data
+     *
+     * @return array{registrant: ContactInfo, admin: ContactInfo, tech: ContactInfo, auxBilling: ContactInfo}
+     * @throws ApiException
+     *
+     */
+    private function parseContactsInfo(array $data): array
+    {
+        $contactsData = $data['DomainContactsResult'] ?? [];
+
+        if (!is_array($contactsData)) {
+            throw new ApiException('Invalid contacts response format');
+        }
+
+        return [
+            'registrant' => $this->createContactFromArray($contactsData, 'Registrant'),
+            'admin'      => $this->createContactFromArray($contactsData, 'Admin'),
+            'tech'       => $this->createContactFromArray($contactsData, 'Tech'),
+            'auxBilling' => $this->createContactFromArray($contactsData, 'AuxBilling'),
+        ];
+    }
+
+    /**
+     * Create ContactInfo object from array data
+     *
+     * @param array<string, mixed> $data
+     */
+    private function createContactFromArray(array $data, string $type): ContactInfo
+    {
+        $firstName     = $this->getStringValue($data, $type . 'FirstName');
+        $lastName      = $this->getStringValue($data, $type . 'LastName');
+        $address1      = $this->getStringValue($data, $type . 'Address1');
+        $city          = $this->getStringValue($data, $type . 'City');
+        $stateProvince = $this->getStringValue($data, $type . 'StateProvince');
+        $postalCode    = $this->getStringValue($data, $type . 'PostalCode');
+        $country       = $this->getStringValue($data, $type . 'Country');
+        $phone         = $this->getStringValue($data, $type . 'Phone');
+        $email         = $this->getStringValue($data, $type . 'EmailAddress');
+        $address2      = $this->getStringValue($data, $type . 'Address2');
+        $organization  = $this->getStringValue($data, $type . 'Organization');
+        $jobTitle      = $this->getStringValue($data, $type . 'JobTitle');
+        $fax           = $this->getStringValue($data, $type . 'Fax');
+
+        return new ContactInfo(
+            firstName    : $firstName,
+            lastName     : $lastName,
+            address1     : $address1,
+            city         : $city,
+            stateProvince: $stateProvince,
+            postalCode   : $postalCode,
+            country      : $country,
+            phone        : $phone,
+            email        : $email,
+            address2     : $address2,
+            organization : $organization,
+            jobTitle     : $jobTitle,
+            fax          : $fax,
+        );
     }
 
     /**
@@ -153,6 +333,30 @@ readonly class DomainService
     }
 
     /**
+     * Build contact parameters for API request
+     *
+     * @return array<string, string>
+     */
+    private function buildContactParameters(string $type, ContactInfo $contact): array
+    {
+        return [
+            $type . 'FirstName'     => $contact->firstName,
+            $type . 'LastName'      => $contact->lastName,
+            $type . 'Address1'      => $contact->address1,
+            $type . 'City'          => $contact->city,
+            $type . 'StateProvince' => $contact->stateProvince,
+            $type . 'PostalCode'    => $contact->postalCode,
+            $type . 'Country'       => $contact->country,
+            $type . 'Phone'         => $contact->phone,
+            $type . 'EmailAddress'  => $contact->email,
+            $type . 'Address2'      => $contact->address2 ?? '',
+            $type . 'Organization'  => $contact->organization ?? '',
+            $type . 'JobTitle'      => $contact->jobTitle ?? '',
+            $type . 'Fax'           => $contact->fax ?? '',
+        ];
+    }
+
+    /**
      * Create (register) a new domain
      *
      * @param array<string, mixed> $additionalParameters
@@ -174,7 +378,7 @@ readonly class DomainService
     ): bool {
         $parameters = [
             'DomainName' => $domainName,
-            'Years' => $years,
+            'Years'      => $years,
             ...$this->buildContactParameters('Registrant', $registrant),
             ...$this->buildContactParameters('Admin', $admin),
             ...$this->buildContactParameters('Tech', $tech),
@@ -204,7 +408,7 @@ readonly class DomainService
     {
         $parameters = [
             'DomainName' => $domainName,
-            'Years' => $years,
+            'Years'      => $years,
         ];
 
         $response = $this->apiClient->request(
@@ -245,13 +449,13 @@ readonly class DomainService
      *
      * @param array<string> $domainNames
      *
-     * @throws ApiException
+     * @return array<string, bool>
      * @throws AuthenticationException
      * @throws NetworkException
      * @throws ParseException
      * @throws ValidationException
      *
-     * @return array<string, bool>
+     * @throws ApiException
      */
     public function check(array $domainNames): array
     {
@@ -273,212 +477,6 @@ readonly class DomainService
     }
 
     /**
-     * Parse domain list from API response
-     *
-     * @param array<string, mixed> $data
-     *
-     * @return array<Domain>
-     */
-    private function parseDomainList(array $data): array
-    {
-        $domains = [];
-        $domainList = $data['DomainGetListResult'] ?? [];
-
-        if (!is_array($domainList)) {
-            return [];
-        }
-
-        if (isset($domainList['Domain'])) {
-            $domainData = $domainList['Domain'];
-
-            if (!is_array($domainData)) {
-                return [];
-            }
-
-            // Handle single domain
-            if (isset($domainData['@Name'])) {
-                $domains[] = $this->createDomainFromArray($domainData);
-            } else {
-                // Handle multiple domains
-                foreach ($domainData as $domain) {
-                    if (is_array($domain) && isset($domain['@Name'])) {
-                        $domains[] = $this->createDomainFromArray($domain);
-                    }
-                }
-            }
-        }
-
-        return $domains;
-    }
-
-    /**
-     * Create Domain object from array data
-     *
-     * @param array<string, mixed> $data
-     */
-    private function createDomainFromArray(array $data): Domain
-    {
-        $name = $this->getStringValue($data, '@Name', '@DomainName');
-        $statusValue = $this->getStringValue($data, '@Status') ?: 'Active';
-        $createdValue = $this->getStringValue($data, '@Created') ?: 'now';
-        $expiresValue = $this->getStringValue($data, '@Expires') ?: 'now';
-        $autoRenewValue = $this->getStringValue($data, '@AutoRenew') ?: 'false';
-        $whoisGuardValue = $this->getStringValue($data, '@WhoisGuard') ?: 'DISABLED';
-        $isPremiumValue = $this->getStringValue($data, '@IsPremium') ?: 'false';
-        $registrarValue = $this->getStringValue($data, '@Registrar');
-
-        try {
-            $status = DomainStatus::from($statusValue);
-        } catch (Exception) {
-            $status = DomainStatus::ACTIVE;
-        }
-
-        try {
-            $createdDate = new DateTimeImmutable($createdValue);
-        } catch (Exception) {
-            $createdDate = new DateTimeImmutable();
-        }
-
-        try {
-            $expirationDate = new DateTimeImmutable($expiresValue);
-        } catch (Exception) {
-            $expirationDate = new DateTimeImmutable();
-        }
-
-        return new Domain(
-            name          : $name,
-            status        : $status,
-            createdDate   : $createdDate,
-            expirationDate: $expirationDate,
-            autoRenew     : $autoRenewValue === 'true',
-            whoisGuard    : $whoisGuardValue === 'ENABLED',
-            isPremium     : $isPremiumValue === 'true',
-            registrar     : $registrarValue,
-        );
-    }
-
-    /**
-     * Safely get string value from array with fallback keys
-     *
-     * @param array<string, mixed> $data
-     */
-    private function getStringValue(array $data, string $key, ?string $fallbackKey = null): string
-    {
-        $value = $data[$key] ?? null;
-
-        if ($value === null && $fallbackKey !== null) {
-            $value = $data[$fallbackKey] ?? null;
-        }
-
-        return is_string($value) ? $value : '';
-    }
-
-    /**
-     * Parse domain info from API response
-     *
-     * @param array<string, mixed> $data
-     *
-     * @throws ApiException
-     */
-    private function parseDomainInfo(array $data): Domain
-    {
-        $domainInfo = $data['DomainGetInfoResult'] ?? [];
-
-        if (!is_array($domainInfo)) {
-            throw new ApiException('Invalid domain info response format');
-        }
-
-        return $this->createDomainFromArray($domainInfo);
-    }
-
-    /**
-     * Parse contacts info from API response
-     *
-     * @param array<string, mixed> $data
-     *
-     * @throws ApiException
-     *
-     * @return array{registrant: ContactInfo, admin: ContactInfo, tech: ContactInfo, auxBilling: ContactInfo}
-     */
-    private function parseContactsInfo(array $data): array
-    {
-        $contactsData = $data['DomainContactsResult'] ?? [];
-
-        if (!is_array($contactsData)) {
-            throw new ApiException('Invalid contacts response format');
-        }
-
-        return [
-            'registrant' => $this->createContactFromArray($contactsData, 'Registrant'),
-            'admin' => $this->createContactFromArray($contactsData, 'Admin'),
-            'tech' => $this->createContactFromArray($contactsData, 'Tech'),
-            'auxBilling' => $this->createContactFromArray($contactsData, 'AuxBilling'),
-        ];
-    }
-
-    /**
-     * Create ContactInfo object from array data
-     *
-     * @param array<string, mixed> $data
-     */
-    private function createContactFromArray(array $data, string $type): ContactInfo
-    {
-        $firstName = $this->getStringValue($data, $type . 'FirstName');
-        $lastName = $this->getStringValue($data, $type . 'LastName');
-        $address1 = $this->getStringValue($data, $type . 'Address1');
-        $city = $this->getStringValue($data, $type . 'City');
-        $stateProvince = $this->getStringValue($data, $type . 'StateProvince');
-        $postalCode = $this->getStringValue($data, $type . 'PostalCode');
-        $country = $this->getStringValue($data, $type . 'Country');
-        $phone = $this->getStringValue($data, $type . 'Phone');
-        $email = $this->getStringValue($data, $type . 'EmailAddress');
-        $address2 = $this->getStringValue($data, $type . 'Address2');
-        $organization = $this->getStringValue($data, $type . 'Organization');
-        $jobTitle = $this->getStringValue($data, $type . 'JobTitle');
-        $fax = $this->getStringValue($data, $type . 'Fax');
-
-        return new ContactInfo(
-            firstName    : $firstName,
-            lastName     : $lastName,
-            address1     : $address1,
-            city         : $city,
-            stateProvince: $stateProvince,
-            postalCode   : $postalCode,
-            country      : $country,
-            phone        : $phone,
-            email        : $email,
-            address2     : $address2,
-            organization : $organization,
-            jobTitle     : $jobTitle,
-            fax          : $fax,
-        );
-    }
-
-    /**
-     * Build contact parameters for API request
-     *
-     * @return array<string, string>
-     */
-    private function buildContactParameters(string $type, ContactInfo $contact): array
-    {
-        return [
-            $type . 'FirstName' => $contact->firstName,
-            $type . 'LastName' => $contact->lastName,
-            $type . 'Address1' => $contact->address1,
-            $type . 'City' => $contact->city,
-            $type . 'StateProvince' => $contact->stateProvince,
-            $type . 'PostalCode' => $contact->postalCode,
-            $type . 'Country' => $contact->country,
-            $type . 'Phone' => $contact->phone,
-            $type . 'EmailAddress' => $contact->email,
-            $type . 'Address2' => $contact->address2 ?? '',
-            $type . 'Organization' => $contact->organization ?? '',
-            $type . 'JobTitle' => $contact->jobTitle ?? '',
-            $type . 'Fax' => $contact->fax ?? '',
-        ];
-    }
-
-    /**
      * Parse availability check results
      *
      * @param array<string, mixed> $data
@@ -487,7 +485,7 @@ readonly class DomainService
      */
     private function parseAvailabilityCheck(array $data): array
     {
-        $results = [];
+        $results     = [];
         $checkResult = $data['DomainCheckResult'] ?? [];
 
         if (!is_array($checkResult)) {
@@ -496,7 +494,7 @@ readonly class DomainService
 
         if (isset($checkResult['@Domain'])) {
             // Single domain
-            $domain = $this->getStringValue($checkResult, '@Domain');
+            $domain    = $this->getStringValue($checkResult, '@Domain');
             $available = $this->getStringValue($checkResult, '@Available') === 'true';
             if ($domain !== '') {
                 $results[$domain] = $available;
@@ -505,7 +503,7 @@ readonly class DomainService
             // Multiple domains
             foreach ($checkResult as $domainData) {
                 if (is_array($domainData)) {
-                    $domain = $this->getStringValue($domainData, '@Domain');
+                    $domain    = $this->getStringValue($domainData, '@Domain');
                     $available = $this->getStringValue($domainData, '@Available') === 'true';
                     if ($domain !== '') {
                         $results[$domain] = $available;

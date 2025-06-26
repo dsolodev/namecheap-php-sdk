@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Namecheap\Exceptions;
 
@@ -11,6 +11,13 @@ use Throwable;
  */
 class ParseException extends NamecheapException
 {
+    /**
+     * @param string $message
+     * @param int $code
+     * @param Throwable|null $previous
+     * @param string|null $rawResponse
+     * @param array<string, mixed> $context
+     */
     public function __construct(
         string                   $message = 'Failed to parse response',
         int                      $code = 0,

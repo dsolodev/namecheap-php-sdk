@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare(strict_types = 1);
 
 namespace Namecheap\Exceptions;
 
@@ -11,6 +11,12 @@ use Throwable;
  */
 class ConfigurationException extends NamecheapException
 {
+    /**
+     * @param string $message
+     * @param int $code
+     * @param Throwable|null $previous
+     * @param array<string, mixed> $context
+     */
     public function __construct(
         string     $message = 'Invalid configuration',
         int        $code = 0,

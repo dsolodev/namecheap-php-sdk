@@ -49,7 +49,7 @@ readonly class ApiClient
     /**
      * Factory method to create API client from parameters
      *
-     * @param array<int, mixed> $curlOptions
+     * @param array<string, mixed> $curlOptions
      *
      * @throws ConfigurationException
      */

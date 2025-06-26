@@ -20,7 +20,7 @@ readonly class SslCertificate
         public DateTimeImmutable $createdDate,
         public DateTimeImmutable $expirationDate,
         public string            $commonName,
-        public array             $sanDomains = [],
+        /** @var array<string> */ public array $sanDomains = [],
         public ?string           $organizationName = null,
         public ?string           $organizationUnit = null,
         public ?string           $locality = null,
